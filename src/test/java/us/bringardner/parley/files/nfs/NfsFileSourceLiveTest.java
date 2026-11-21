@@ -35,8 +35,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
@@ -44,6 +48,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import us.bringardner.parley.files.FileSource;
+import us.bringardner.parley.files.FileSourceWatchEvent;
+import us.bringardner.parley.files.FileSourceWatchKey;
 import us.bringardner.parley.files.IRandomAccessStream;
 import us.bringardner.parley.files.lock.FileSourceLock;
 import us.bringardner.parley.nfs.client.NfsClient;
@@ -236,5 +242,58 @@ public class NfsFileSourceLiveTest {
 		assertNotNull(again);
 		again.release();
 		assertTrue(Arrays.asList(dir.list()).contains("lock.txt"));
+	}
+
+	/** the events of a key, waiting up to a few polling intervals for at least one */
+	private static List<String> events(NfsWatchService service, FileSourceWatchKey key) throws Exception {
+		List<String> ret = new ArrayList<String>();
+		long end = System.currentTimeMillis()+10000;
+		while( ret.isEmpty() && System.currentTimeMillis() < end ) {
+			FileSourceWatchKey k = service.poll(100, TimeUnit.MILLISECONDS);
+			if( k != null ) {
+				for (FileSourceWatchEvent e : k.pollEvents()) {
+					ret.add(e.kind()+" "+e.name());
+				}
+				k.reset();
+			}
+		}
+		return ret;
+	}
+
+	@Test
+	public void aFolderIsWatchedByTheServersChangeAttribute() throws Exception {
+		try (NfsWatchService service = new NfsWatchService(Duration.ofMillis(200))) {
+			// the server sends a change attribute that moves with the folder, or the watcher lists every time
+			Object before = service.changeStamp(dir);
+			assertNotNull(before, "the server sends no change attribute for a folder");
+			assertEquals(before, service.changeStamp(dir));
+
+			FileSourceWatchKey key = service.register(dir);
+			// another client makes the changes: this one has no hand in them
+			NfsFileSourceFactory second = new NfsFileSourceFactory();
+			second.setConnectionProperties(settings);
+			assertTrue(second.connect());
+			try {
+				FileSource theirs = second.createFileSource(dir.getAbsolutePath()).getChild("seen.txt");
+				assertTrue(theirs.createNewFile());
+				assertEquals(Arrays.asList("ENTRY_CREATE seen.txt"), events(service, key));
+				assertFalse(before.equals(service.changeStamp(dir)), "the change attribute did not move");
+
+				assertTrue(theirs.renameTo(second.createFileSource(dir.getAbsolutePath()).getChild("moved.txt")));
+				List<String> renamed = new ArrayList<String>();
+				while( renamed.size() < 2 ) {
+					List<String> more = events(service, key);
+					assertFalse(more.isEmpty(), "the rename was not seen: "+renamed);
+					renamed.addAll(more);
+				}
+				assertTrue(renamed.contains("ENTRY_DELETE seen.txt") && renamed.contains("ENTRY_CREATE moved.txt"), renamed.toString());
+
+				assertTrue(second.createFileSource(dir.getAbsolutePath()).getChild("moved.txt").delete());
+				assertEquals(Arrays.asList("ENTRY_DELETE moved.txt"), events(service, key));
+			} finally {
+				key.cancel();
+				second.disConnect();
+			}
+		}
 	}
 }
