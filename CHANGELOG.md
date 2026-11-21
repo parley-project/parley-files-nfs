@@ -2,6 +2,13 @@
 
 ## parley-files-nfs 2.0.0 (unreleased)
 
+### Added (2026-11-21: extended attributes, D101)
+
+- **Extended attributes** (`FileSource.isExtendedAttributesSupported`, `getExtendedAttributeNames`,
+  `getExtendedAttribute`, `setExtendedAttribute`, `removeExtendedAttribute`) through NFSv4.2 (RFC 8276): supported for
+  an existing file or folder (not a symbolic link) when the server says `xattr_support`. Needs parley-nfs with
+  `NfsClient.getXattr` and the rest, and parley-files with the methods.
+
 ### Added (2026-11-21: watching a folder, D97)
 
 - **`NfsFileSourceFactory.newWatchService()`**: the watch service of parley-files, except that it asks the server's

@@ -440,6 +440,45 @@ public class NfsFileSource implements FileSource {
 		return s != null && s.isLink() ? client().readLink(serverPath()) : null;
 	}
 
+	// ------------------------------------------------------------------ extended attributes (RFC 8276, D101)
+
+	/** a file that exists, isn't a link, on a server that keeps extended attributes for it (NFSv4.2) */
+	@Override
+	public boolean isExtendedAttributesSupported() throws IOException {
+		NfsFileInfo s = self();
+		return s != null && !s.isLink() && client().isXattrSupported(serverPath());
+	}
+
+	private String xattrPath() throws IOException {
+		if( !isExtendedAttributesSupported() ) {
+			throw new UnsupportedOperationException("Extended attributes are not supported for "+getAbsolutePath());
+		}
+		return serverPath();
+	}
+
+	@Override
+	public List<String> getExtendedAttributeNames() throws IOException {
+		return client().listXattrs(xattrPath());
+	}
+
+	@Override
+	public byte[] getExtendedAttribute(String name) throws IOException {
+		return client().getXattr(xattrPath(), name);
+	}
+
+	@Override
+	public void setExtendedAttribute(String name, byte[] value) throws IOException {
+		client().setXattr(xattrPath(), name, value);
+		clearAttr();
+	}
+
+	@Override
+	public boolean removeExtendedAttribute(String name) throws IOException {
+		boolean ret = client().removeXattr(xattrPath(), name);
+		clearAttr();
+		return ret;
+	}
+
 	@Override
 	public FileSource getLinkedTo() throws IOException {
 		String text = getLinkText();

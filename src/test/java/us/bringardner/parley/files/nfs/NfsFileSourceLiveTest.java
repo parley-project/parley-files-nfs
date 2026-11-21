@@ -28,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -251,6 +252,29 @@ public class NfsFileSourceLiveTest {
 	}
 
 	/** the events of a key, waiting up to a few polling intervals for at least one */
+	/**
+	 * Extended attributes (RFC 8276, D101) on a real server. A server that doesn't offer them (the Linux kernel's
+	 * NFS server may not) says xattr_support false, and the test is skipped.
+	 */
+	@Test
+	public void extendedAttributesAreKeptByTheServer() throws Exception {
+		FileSource f = factory.createFileSource(dir.getAbsolutePath() + "/xattr.txt");
+		assertTrue(f.createNewFile());
+		Assumptions.assumeTrue(f.isExtendedAttributesSupported(), "the server keeps no extended attributes");
+		assertEquals(0, f.getExtendedAttributeNames().size());
+		f.setExtendedAttribute("user.origin", bytes("https://example.com/x"));
+		f.setExtendedAttribute("user.tag", new byte[] { 0, 1, (byte) 255 });
+		assertEquals(2, f.getExtendedAttributeNames().size());
+		assertArrayEquals(bytes("https://example.com/x"), f.getExtendedAttribute("user.origin"));
+		assertArrayEquals(new byte[] { 0, 1, (byte) 255 }, f.getExtendedAttribute("user.tag"));
+		f.setExtendedAttribute("user.origin", bytes("replaced"));
+		assertArrayEquals(bytes("replaced"), f.getExtendedAttribute("user.origin"));
+		assertTrue(f.removeExtendedAttribute("user.tag"));
+		assertFalse(f.removeExtendedAttribute("user.tag"));
+		assertNull(f.getExtendedAttribute("user.tag"));
+		assertEquals(1, f.getExtendedAttributeNames().size());
+	}
+
 	private static List<String> events(NfsWatchService service, FileSourceWatchKey key) throws Exception {
 		List<String> ret = new ArrayList<String>();
 		long end = System.currentTimeMillis()+10000;
