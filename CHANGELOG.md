@@ -4,7 +4,7 @@
 
 ### Added
 
-- `NfsFileSourceKerberosTest`: the FileSource logging in with krb5, krb5i and krb5p to a parley-nfs server that takes only Kerberos, with a Kerby KDC in the JVM (no outside machines); also a refused AUTH_SYS login and a wrong keytab. `TestKdc` is a copy of parley-nfs's, which doesn't publish its test classes.
+- `NfsFileSourceKerberosTest`: the FileSource logging in with krb5, krb5i and krb5p to a parley-nfs server that takes only Kerberos, with a Kerby KDC in the JVM (no outside machines); also a refused AUTH_SYS login and a wrong keytab. `TestKdc` comes from parley-nfs's test jar.
 - `NfsFileSourceLiveTest`: the FileSource against a real NFS server (Linux nfsd), skipped unless `nfs.live.host` is set.
 - **The module** (T10, D87): a parley-files `FileSource` for NFSv4 servers, `nfs://host[:port]/path`, on the
   parley-nfs client. Login with AUTH_SYS or Kerberos (krb5, krb5i, krb5p); files, random access and seekable

@@ -70,7 +70,15 @@
 			<version>${project.version}</version>
 		</dependency>
 
-		<!-- A Kerberos KDC for the Kerberos tests (test only) -->
+		<!-- parley-nfs's test classes: TestKdc, a Kerberos KDC for the Kerberos tests -->
+		<dependency>
+			<groupId>us.bringardner.parley</groupId>
+			<artifactId>parley-nfs</artifactId>
+			<version>${project.version}</version>
+			<type>test-jar</type>
+			<scope>test</scope>
+		</dependency>
+		<!-- Kerby, which TestKdc uses (test scope dependencies aren't passed on) -->
 		<dependency>
 			<groupId>org.apache.kerby</groupId>
 			<artifactId>kerb-simplekdc</artifactId>
