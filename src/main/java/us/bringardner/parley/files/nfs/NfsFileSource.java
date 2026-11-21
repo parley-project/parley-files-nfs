@@ -276,6 +276,11 @@ public class NfsFileSource implements FileSource {
 		return targetPath;
 	}
 
+	/** The server's change attribute of this folder (or of the file a link points at), see NfsClient.changeId. */
+	long changeId() throws IOException {
+		return factory.client().changeId(realPath());
+	}
+
 	/** The path to ask the server about this name itself: a link stays a link, links in the folders are resolved. */
 	synchronized String serverPath() throws IOException {
 		load();

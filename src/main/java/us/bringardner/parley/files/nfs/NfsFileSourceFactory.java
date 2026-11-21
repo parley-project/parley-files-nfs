@@ -394,6 +394,12 @@ public class NfsFileSourceFactory extends FileSourceFactory {
 
 	// ------------------------------------------------------------------ properties
 
+	/** A watch service that asks the server's change attribute whether a folder changed, and lists it only then. */
+	@Override
+	public us.bringardner.parley.files.FileSourceWatchService newWatchService() throws IOException {
+		return new NfsWatchService();
+	}
+
 	@Override
 	public FileSourceFactory createThreadSafeCopy() {
 		NfsFileSourceFactory ret = new NfsFileSourceFactory();

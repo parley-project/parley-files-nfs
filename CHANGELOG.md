@@ -2,6 +2,13 @@
 
 ## parley-files-nfs 2.0.0 (unreleased)
 
+### Added (2026-11-21: watching a folder, D97)
+
+- **`NfsFileSourceFactory.newWatchService()`**: the watch service of parley-files, except that it asks the server's
+  change attribute (one small GETATTR) and lists a folder only when that has moved, so it sees the changes of other
+  clients cheaply and doesn't depend on a directory delegation (a Linux server tells of no changes). Needs
+  parley-nfs `NfsClient.changeId`.
+
 ### Added
 
 - `NfsFileSourceKerberosTest`: the FileSource logging in with krb5, krb5i and krb5p to a parley-nfs server that takes only Kerberos, with a Kerby KDC in the JVM (no outside machines); also a refused AUTH_SYS login and a wrong keytab. `TestKdc` comes from parley-nfs's test jar.
