@@ -212,9 +212,11 @@ public class NfsFileSourceLiveTest {
 	public void locksAreHeldAgainstOtherClients() throws Exception {
 		FileSource f = dir.getChild("lock.txt");
 		write(f, bytes("0123456789"));
-		NfsClient other = new NfsClient(settings.getProperty("host"), Integer.parseInt(settings.getProperty("port")),
-				settings.getProperty("mount"), Long.parseLong(settings.getProperty("uid")),
-				Long.parseLong(settings.getProperty("gid")), 20000);
+		// a second login with the same settings (AUTH_SYS or Kerberos) is another NFS client with its own lock owner
+		NfsFileSourceFactory second = new NfsFileSourceFactory();
+		second.setConnectionProperties(settings);
+		assertTrue(second.connect());
+		NfsClient other = second.client();
 		try {
 			String path = f.getAbsolutePath();
 			FileSourceLock mine = f.tryLock(2, 4, false);
@@ -228,7 +230,7 @@ public class NfsFileSourceLiveTest {
 				assertTrue(now.isHeld());
 			}
 		} finally {
-			other.close();
+			second.disConnect();
 		}
 		FileSourceLock again = f.tryLock();
 		assertNotNull(again);
