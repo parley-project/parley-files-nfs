@@ -85,6 +85,8 @@ rules (everything may be read and written) differ from the ones the suite checks
 
 ## Testing against a real server
 
+The build tests Kerberos on its own (`NfsFileSourceKerberosTest`, with a KDC in the JVM). The live test below is for a real server.
+
 `NfsFileSourceLiveTest` runs the FileSource against a real NFS server (for example Linux nfsd). It is skipped unless
 `nfs.live.host` is set:
 
