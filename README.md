@@ -82,3 +82,13 @@ one tree, so the factory has one root (`/`).
 provider, java.io.File behaviour, locks, including a second JVM as another NFS client) against a parley-nfs `NfsServer`
 that exports a temporary folder, as the user running the tests. Run it as a user other than root: the superuser's
 rules (everything may be read and written) differ from the ones the suite checks for.
+
+## Testing against a real server
+
+`NfsFileSourceLiveTest` runs the FileSource against a real NFS server (for example Linux nfsd). It is skipped unless
+`nfs.live.host` is set:
+
+    mvn test -Dtest=NfsFileSourceLiveTest -Dnfs.live.host=HOST -Dnfs.live.mount=/ -Dnfs.live.uid=1000 -Dnfs.live.gid=1000
+
+Other properties: `nfs.live.port` (2049) and, for Kerberos, `nfs.live.auth` (krb5, krb5i, krb5p),
+`nfs.live.krb5.service`, `nfs.live.krb5.principal`, `nfs.live.krb5.keytab`. The test works in a folder of its own and removes it.
