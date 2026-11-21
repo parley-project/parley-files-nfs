@@ -40,6 +40,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
+import java.nio.file.Path;
+import java.nio.file.StandardWatchEventKinds;
+import java.nio.file.WatchEvent;
+import java.nio.file.WatchKey;
+import java.nio.file.WatchService;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
@@ -51,6 +56,7 @@ import us.bringardner.parley.files.FileSource;
 import us.bringardner.parley.files.FileSourceWatchEvent;
 import us.bringardner.parley.files.FileSourceWatchKey;
 import us.bringardner.parley.files.IRandomAccessStream;
+import us.bringardner.parley.files.java.file.FileSourcePath;
 import us.bringardner.parley.files.lock.FileSourceLock;
 import us.bringardner.parley.nfs.client.NfsClient;
 import us.bringardner.parley.nfs.client.NfsLock;
@@ -293,6 +299,50 @@ public class NfsFileSourceLiveTest {
 			} finally {
 				key.cancel();
 				second.disConnect();
+			}
+		}
+	}
+
+	/** the names in the events of the next key (java.nio.file), waiting up to ten seconds */
+	private static List<String> nioEvents(WatchService service) throws Exception {
+		List<String> ret = new ArrayList<String>();
+		long end = System.currentTimeMillis()+10000;
+		while( ret.isEmpty() && System.currentTimeMillis() < end ) {
+			WatchKey k = service.poll(100, TimeUnit.MILLISECONDS);
+			if( k != null ) {
+				for (WatchEvent<?> e : k.pollEvents()) {
+					ret.add(e.kind().name()+" "+e.context());
+				}
+				k.reset();
+			}
+		}
+		return ret;
+	}
+
+	@Test
+	public void aFolderIsWatchedThroughJavaNio() throws Exception {
+		String saved = System.getProperty("parley.files.watch.pollInterval");
+		System.setProperty("parley.files.watch.pollInterval", "200");
+		NfsFileSourceFactory second = new NfsFileSourceFactory();
+		try {
+			Path path = new FileSourcePath(dir);
+			try (WatchService service = path.getFileSystem().newWatchService()) {
+				path.register(service, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_DELETE);
+				// another client makes the changes
+				second.setConnectionProperties(settings);
+				assertTrue(second.connect());
+				FileSource theirs = second.createFileSource(dir.getAbsolutePath()).getChild("nio.txt");
+				assertTrue(theirs.createNewFile());
+				assertEquals(Arrays.asList("ENTRY_CREATE nio.txt"), nioEvents(service));
+				assertTrue(theirs.delete());
+				assertEquals(Arrays.asList("ENTRY_DELETE nio.txt"), nioEvents(service));
+			}
+		} finally {
+			second.disConnect();
+			if( saved == null ) {
+				System.clearProperty("parley.files.watch.pollInterval");
+			} else {
+				System.setProperty("parley.files.watch.pollInterval", saved);
 			}
 		}
 	}
