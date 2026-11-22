@@ -32,6 +32,9 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.attribute.GroupPrincipal;
 import java.nio.file.attribute.UserPrincipal;
+import java.nio.ByteBuffer;
+import java.nio.file.FileSystemException;
+import java.nio.file.attribute.UserDefinedFileAttributeView;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -442,41 +445,78 @@ public class NfsFileSource implements FileSource {
 
 	// ------------------------------------------------------------------ extended attributes (RFC 8276, D101)
 
-	/** a file that exists, isn't a link, on a server that keeps extended attributes for it (NFSv4.2) */
+	/**
+	 * The user attributes of an existing file or folder (not a link) on a server that keeps extended attributes for
+	 * it (NFSv4.2); null otherwise.
+	 */
 	@Override
-	public boolean isExtendedAttributesSupported() throws IOException {
+	public UserDefinedFileAttributeView getUserDefinedFileAttributeView() throws IOException {
 		NfsFileInfo s = self();
-		return s != null && !s.isLink() && client().isXattrSupported(serverPath());
-	}
-
-	private String xattrPath() throws IOException {
-		if( !isExtendedAttributesSupported() ) {
-			throw new UnsupportedOperationException("Extended attributes are not supported for "+getAbsolutePath());
+		if( s == null || s.isLink() ) {
+			return null;
 		}
-		return serverPath();
+		String serverPath = serverPath();
+		return client().isXattrSupported(serverPath) ? new XattrView(serverPath) : null;
 	}
 
-	@Override
-	public List<String> getExtendedAttributeNames() throws IOException {
-		return client().listXattrs(xattrPath());
-	}
+	/** RFC 8276 through the JDK's view: a missing attribute is a FileSystemException, as for local files */
+	private class XattrView implements UserDefinedFileAttributeView {
+		private final String serverPath;
 
-	@Override
-	public byte[] getExtendedAttribute(String name) throws IOException {
-		return client().getXattr(xattrPath(), name);
-	}
+		XattrView(String serverPath) {
+			this.serverPath = serverPath;
+		}
 
-	@Override
-	public void setExtendedAttribute(String name, byte[] value) throws IOException {
-		client().setXattr(xattrPath(), name, value);
-		clearAttr();
-	}
+		@Override
+		public String name() {
+			return "user";
+		}
 
-	@Override
-	public boolean removeExtendedAttribute(String name) throws IOException {
-		boolean ret = client().removeXattr(xattrPath(), name);
-		clearAttr();
-		return ret;
+		@Override
+		public List<String> list() throws IOException {
+			return client().listXattrs(serverPath);
+		}
+
+		private byte[] value(String name) throws IOException {
+			byte[] v = client().getXattr(serverPath, name);
+			if( v == null ) {
+				throw new FileSystemException(getAbsolutePath(), null, "No such attribute: "+name);
+			}
+			return v;
+		}
+
+		@Override
+		public int size(String name) throws IOException {
+			return value(name).length;
+		}
+
+		@Override
+		public int read(String name, ByteBuffer dst) throws IOException {
+			byte[] v = value(name);
+			if( dst.remaining() < v.length ) {
+				throw new FileSystemException(getAbsolutePath(), null, "The buffer is too small for the "+v.length+" bytes of "+name);
+			}
+			dst.put(v);
+			return v.length;
+		}
+
+		@Override
+		public int write(String name, ByteBuffer src) throws IOException {
+			byte[] v = new byte[src.remaining()];
+			src.get(v);
+			client().setXattr(serverPath, name, v);
+			clearAttr();
+			return v.length;
+		}
+
+		@Override
+		public void delete(String name) throws IOException {
+			boolean removed = client().removeXattr(serverPath, name);
+			clearAttr();
+			if( !removed ) {
+				throw new FileSystemException(getAbsolutePath(), null, "No such attribute: "+name);
+			}
+		}
 	}
 
 	@Override

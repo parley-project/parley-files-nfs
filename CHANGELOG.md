@@ -4,10 +4,9 @@
 
 ### Added (2026-11-21: extended attributes, D101)
 
-- **Extended attributes** (`FileSource.isExtendedAttributesSupported`, `getExtendedAttributeNames`,
-  `getExtendedAttribute`, `setExtendedAttribute`, `removeExtendedAttribute`) through NFSv4.2 (RFC 8276): supported for
-  an existing file or folder (not a symbolic link) when the server says `xattr_support`. Needs parley-nfs with
-  `NfsClient.getXattr` and the rest, and parley-files with the methods.
+- **Extended attributes**: `getUserDefinedFileAttributeView()` gives the JDK's `UserDefinedFileAttributeView` through
+  NFSv4.2 (RFC 8276), for an existing file or folder (not a symbolic link) when the server says `xattr_support`, and
+  null otherwise. Needs parley-nfs with `NfsClient.getXattr` and the rest, and parley-files with the method.
 
 ### Added (2026-11-21: watching a folder, D97)
 

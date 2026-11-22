@@ -26,12 +26,16 @@ package us.bringardner.parley.files.nfs;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystemException;
+import java.nio.file.attribute.UserDefinedFileAttributeView;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
@@ -86,48 +90,59 @@ public class NfsFileSourceXattrTest {
 		return s.getBytes(StandardCharsets.UTF_8);
 	}
 
+	private static byte[] get(UserDefinedFileAttributeView v, String name) throws IOException {
+		ByteBuffer buf = ByteBuffer.allocate(v.size(name));
+		assertEquals(buf.capacity(), v.read(name, buf));
+		return buf.array();
+	}
+
+	private static void set(UserDefinedFileAttributeView v, String name, byte[] value) throws IOException {
+		assertEquals(value.length, v.write(name, ByteBuffer.wrap(value)));
+	}
+
 	@Test
-	void setGetListRemoveThroughTheFileSource() throws IOException {
+	void setGetListRemoveThroughTheView() throws IOException {
 		FileSource f = factory.createFileSource("/x.txt");
 		assertTrue(f.createNewFile());
-		assertTrue(f.isExtendedAttributesSupported());
-		assertEquals(Collections.emptyList(), f.getExtendedAttributeNames());
-		assertNull(f.getExtendedAttribute("origin"));
-		assertFalse(f.removeExtendedAttribute("origin"));
+		UserDefinedFileAttributeView v = f.getUserDefinedFileAttributeView();
+		assertNotNull(v);
+		assertEquals("user", v.name());
+		assertEquals(Collections.emptyList(), v.list());
+		assertThrows(FileSystemException.class, () -> v.size("origin"));
+		assertThrows(FileSystemException.class, () -> v.delete("origin"));
 
-		f.setExtendedAttribute("origin", b("https://example.com/x"));
-		f.setExtendedAttribute("tag", new byte[] { 0, 1, (byte) 255 });
-		List<String> names = f.getExtendedAttributeNames();
+		set(v, "origin", b("https://example.com/x"));
+		set(v, "tag", new byte[] { 0, 1, (byte) 255 });
+		List<String> names = v.list();
 		assertEquals(2, names.size());
 		assertTrue(names.containsAll(List.of("origin", "tag")));
-		assertArrayEquals(b("https://example.com/x"), f.getExtendedAttribute("origin"));
-		assertArrayEquals(new byte[] { 0, 1, (byte) 255 }, f.getExtendedAttribute("tag"));
+		assertArrayEquals(b("https://example.com/x"), get(v, "origin"));
+		assertArrayEquals(new byte[] { 0, 1, (byte) 255 }, get(v, "tag"));
 
-		f.setExtendedAttribute("origin", b("replaced"));
-		assertArrayEquals(b("replaced"), f.getExtendedAttribute("origin"));
-		assertTrue(f.removeExtendedAttribute("tag"));
-		assertFalse(f.removeExtendedAttribute("tag"));
-		assertEquals(List.of("origin"), f.getExtendedAttributeNames());
+		set(v, "origin", b("replaced"));
+		assertArrayEquals(b("replaced"), get(v, "origin"));
+		assertThrows(FileSystemException.class, () -> v.read("origin", ByteBuffer.allocate(2)));
+		v.delete("tag");
+		assertThrows(FileSystemException.class, () -> v.delete("tag"));
+		assertEquals(List.of("origin"), v.list());
 
 		// what the provider behind the server holds is the same
-		assertArrayEquals(b("replaced"), mem.createFileSource("/export/x.txt").getExtendedAttribute("origin"));
+		assertArrayEquals(b("replaced"), get(mem.createFileSource("/export/x.txt").getUserDefinedFileAttributeView(), "origin"));
 	}
 
 	@Test
 	void foldersKeepThem() throws IOException {
 		FileSource d = factory.createFileSource("/dir");
 		assertTrue(d.mkdirs());
-		assertTrue(d.isExtendedAttributesSupported());
-		d.setExtendedAttribute("k", b("v"));
-		assertArrayEquals(b("v"), d.getExtendedAttribute("k"));
+		UserDefinedFileAttributeView v = d.getUserDefinedFileAttributeView();
+		assertNotNull(v);
+		set(v, "k", b("v"));
+		assertArrayEquals(b("v"), get(v, "k"));
 	}
 
 	@Test
 	void aMissingFileKeepsNone() throws IOException {
-		FileSource f = factory.createFileSource("/nope");
-		assertFalse(f.isExtendedAttributesSupported());
-		org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class,
-				() -> f.getExtendedAttribute("k"));
+		assertNull(factory.createFileSource("/nope").getUserDefinedFileAttributeView());
 	}
 
 	@Test
@@ -136,6 +151,6 @@ public class NfsFileSourceXattrTest {
 		assertTrue(target.createNewFile());
 		FileSource link = factory.createSymbolicLink(factory.createFileSource("/link"), "target.txt");
 		assertTrue(link != null && link.exists());
-		assertFalse(link.isExtendedAttributesSupported());
+		assertNull(link.getUserDefinedFileAttributeView());
 	}
 }

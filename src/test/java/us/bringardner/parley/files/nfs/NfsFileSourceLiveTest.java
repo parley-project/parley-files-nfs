@@ -37,6 +37,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.nio.ByteBuffer;
+import java.nio.file.attribute.UserDefinedFileAttributeView;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -260,19 +262,23 @@ public class NfsFileSourceLiveTest {
 	public void extendedAttributesAreKeptByTheServer() throws Exception {
 		FileSource f = factory.createFileSource(dir.getAbsolutePath() + "/xattr.txt");
 		assertTrue(f.createNewFile());
-		Assumptions.assumeTrue(f.isExtendedAttributesSupported(), "the server keeps no extended attributes");
-		assertEquals(0, f.getExtendedAttributeNames().size());
-		f.setExtendedAttribute("user.origin", bytes("https://example.com/x"));
-		f.setExtendedAttribute("user.tag", new byte[] { 0, 1, (byte) 255 });
-		assertEquals(2, f.getExtendedAttributeNames().size());
-		assertArrayEquals(bytes("https://example.com/x"), f.getExtendedAttribute("user.origin"));
-		assertArrayEquals(new byte[] { 0, 1, (byte) 255 }, f.getExtendedAttribute("user.tag"));
-		f.setExtendedAttribute("user.origin", bytes("replaced"));
-		assertArrayEquals(bytes("replaced"), f.getExtendedAttribute("user.origin"));
-		assertTrue(f.removeExtendedAttribute("user.tag"));
-		assertFalse(f.removeExtendedAttribute("user.tag"));
-		assertNull(f.getExtendedAttribute("user.tag"));
-		assertEquals(1, f.getExtendedAttributeNames().size());
+		UserDefinedFileAttributeView v = f.getUserDefinedFileAttributeView();
+		Assumptions.assumeTrue(v != null, "the server keeps no extended attributes");
+		assertEquals(0, v.list().size());
+		v.write("user.origin", ByteBuffer.wrap(bytes("https://example.com/x")));
+		v.write("user.tag", ByteBuffer.wrap(new byte[] { 0, 1, (byte) 255 }));
+		assertEquals(2, v.list().size());
+		ByteBuffer buf = ByteBuffer.allocate(v.size("user.origin"));
+		v.read("user.origin", buf);
+		assertArrayEquals(bytes("https://example.com/x"), buf.array());
+		v.write("user.origin", ByteBuffer.wrap(bytes("replaced")));
+		buf = ByteBuffer.allocate(v.size("user.origin"));
+		v.read("user.origin", buf);
+		assertArrayEquals(bytes("replaced"), buf.array());
+		v.delete("user.tag");
+		assertEquals(1, v.list().size());
+		UserDefinedFileAttributeView again = f.getUserDefinedFileAttributeView();
+		assertEquals(1, again.list().size());
 	}
 
 	private static List<String> events(NfsWatchService service, FileSourceWatchKey key) throws Exception {
